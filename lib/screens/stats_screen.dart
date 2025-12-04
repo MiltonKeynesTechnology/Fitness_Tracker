@@ -849,6 +849,112 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ---------- COACH HINTS ----------
+
+  Widget _buildCoachHints(
+    BuildContext context,
+    Map<MuscleGroup, _RecoveryInfo> recData,
+    Map<MuscleGroup, int> muscleData,
+  ) {
+    final theme = Theme.of(context);
+
+    if (recData.isEmpty && muscleData.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final fresh = <MuscleGroup>[];
+    final fatigued = <MuscleGroup>[];
+    final untrained = <MuscleGroup>[];
+
+    for (final group in MuscleGroup.values) {
+      final info = recData[group];
+      final sets = muscleData[group] ?? 0;
+
+      if (info == null && sets == 0) {
+        // never hit / not in time range
+        untrained.add(group);
+      } else if (info != null) {
+        switch (info.status) {
+          case RecoveryStatus.fresh:
+            fresh.add(group);
+            break;
+          case RecoveryStatus.fatigued:
+            fatigued.add(group);
+            break;
+          case RecoveryStatus.ok:
+            // we currently don't show "OK" explicitly
+            break;
+        }
+      }
+    }
+
+    if (fresh.isEmpty && fatigued.isEmpty && untrained.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget chipsFor(List<MuscleGroup> groups, Color color) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: groups
+            .map(
+              (g) => Chip(
+                label: Text(muscleGroupLabel(g)),
+                backgroundColor: color.withOpacity(0.12),
+                side: BorderSide(color: color.withOpacity(0.6)),
+                labelStyle: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Coach hints',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Based on your recent load (for all time) and sets in this selected range.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+
+        if (fresh.isNotEmpty || untrained.isNotEmpty) ...[
+          Text(
+            'Recommended focus today',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            [...fresh, ...untrained],
+            Colors.green.shade600,
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        if (fatigued.isNotEmpty) ...[
+          Text(
+            'Consider going lighter',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            fatigued,
+            Colors.red.shade600,
+          ),
+        ],
+      ],
+    );
+  }
+
   // ---------- BUILD ----------
 
   @override
@@ -1010,6 +1116,10 @@ class _StatsScreenState extends State<StatsScreen> {
 
                 // --- Recovery status ---
                 _buildRecoverySection(context, recoveryData),
+                const SizedBox(height: 24),
+
+                // --- Coach hints ---
+                _buildCoachHints(context, recoveryData, muscleData),
                 const SizedBox(height: 24),
 
                 // --- Top improving lifts ---

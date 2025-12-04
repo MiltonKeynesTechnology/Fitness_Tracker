@@ -8,6 +8,7 @@ import 'screens/today_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/exercises_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/settings_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,29 +20,69 @@ Future<void> main() async {
   runApp(TrainingTrackerApp(box: box));
 }
 
-class TrainingTrackerApp extends StatelessWidget {
+// TOP-LEVEL APP W/ THEME CONTROL
+class TrainingTrackerApp extends StatefulWidget {
   final Box box;
 
   const TrainingTrackerApp({super.key, required this.box});
 
   @override
+  State<TrainingTrackerApp> createState() => _TrainingTrackerAppState();
+}
+
+class _TrainingTrackerAppState extends State<TrainingTrackerApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  void _setThemeMode(ThemeMode mode) {
+    setState(() {
+      _themeMode = mode;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final lightTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: Brightness.light,
+      ),
+    );
+
+    final darkTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: Brightness.dark,
+      ),
+    );
+
     return MaterialApp(
       title: 'Training Tracker',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        // brightness: Brightness.dark, // uncomment if you prefer dark theme
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: _themeMode,
+      home: HomeScreen(
+        box: widget.box,
+        themeMode: _themeMode,
+        onThemeModeChanged: _setThemeMode,
       ),
-      home: HomeScreen(box: box),
     );
   }
 }
 
+// HOME + BOTTOM NAV
 class HomeScreen extends StatefulWidget {
   final Box box;
+  final ThemeMode themeMode;
+  final void Function(ThemeMode) onThemeModeChanged;
 
-  const HomeScreen({super.key, required this.box});
+  const HomeScreen({
+    super.key,
+    required this.box,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -129,6 +170,16 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onUpdateExercise(Exercise updated) {
+    setState(() {
+      final index = _exercises.indexWhere((e) => e.id == updated.id);
+      if (index != -1) {
+        _exercises[index] = updated;
+      }
+    });
+    _saveToHive();
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -148,9 +199,15 @@ class _HomeScreenState extends State<HomeScreen> {
         exercises: _exercises,
         sessions: _sessions,
         onAddExercise: _onAddExercise,
+        onUpdateExercise: _onUpdateExercise,
       ),
       StatsScreen(
         sessions: _sessions,
+        onClearAll: _clearAllData,
+      ),
+      SettingsScreen(
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
         onClearAll: _clearAllData,
       ),
     ];
@@ -181,6 +238,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.insights),
             label: 'Stats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),

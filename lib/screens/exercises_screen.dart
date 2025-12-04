@@ -13,12 +13,14 @@ class ExercisesScreen extends StatelessWidget {
   final List<Exercise> exercises;
   final List<WorkoutSession> sessions;
   final void Function(Exercise) onAddExercise;
+  final void Function(Exercise) onUpdateExercise; // 👈 NEW
 
   const ExercisesScreen({
     super.key,
     required this.exercises,
     required this.sessions,
     required this.onAddExercise,
+    required this.onUpdateExercise,     // 👈 NEW
   });
 
   // ------- Progress / trend helpers -------
@@ -103,10 +105,6 @@ class ExercisesScreen extends StatelessWidget {
       case _MiniTrend.none:
         return null;
     }
-    // Fallback for analyzer happiness (should never hit)
-    // because all enum cases are covered above.
-    // ignore: dead_code
-    return null;
   }
 
   // ------- Add exercise dialog -------
@@ -248,6 +246,7 @@ class ExercisesScreen extends StatelessWidget {
                     builder: (_) => ExerciseDetailScreen(
                       exercise: e,
                       sessions: sessions,
+                      onUpdateExercise: onUpdateExercise, // 👈 pass down
                     ),
                   ),
                 );

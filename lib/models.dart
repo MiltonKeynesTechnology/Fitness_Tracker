@@ -20,29 +20,46 @@ class Exercise {
   final MuscleGroup group;
   final String? subGroup; // e.g. "Rear delts", "Quads"
 
-  const Exercise({
+  final double? goalWeight;
+  final int? goalReps;
+  final double? manualPr; // manually entered one-rep PR
+
+  Exercise({
     required this.id,
     required this.name,
     required this.region,
     required this.group,
     this.subGroup,
+    this.goalWeight,
+    this.goalReps,
+    this.manualPr,
   });
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'region': region.index,
-        'group': group.index,
-        'subGroup': subGroup,
-      };
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'region': region.index,
+      'group': group.index,
+      'subGroup': subGroup,
+      'goalWeight': goalWeight,
+      'goalReps': goalReps,
+      'manualPr': manualPr,
+    };
+  }
 
-  factory Exercise.fromMap(Map map) => Exercise(
-        id: map['id'] as String,
-        name: map['name'] as String,
-        region: BodyRegion.values[map['region'] as int],
-        group: MuscleGroup.values[map['group'] as int],
-        subGroup: map['subGroup'] as String?,
-      );
+  factory Exercise.fromMap(Map map) {
+    return Exercise(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      region: BodyRegion.values[map['region'] as int],
+      group: MuscleGroup.values[map['group'] as int],
+      subGroup: map['subGroup'] as String?,
+      goalWeight: (map['goalWeight'] as num?)?.toDouble(),
+      goalReps: map['goalReps'] as int?,
+      manualPr: (map['manualPr'] as num?)?.toDouble(),
+    );
+  }
 }
 
 class WorkoutSet {
