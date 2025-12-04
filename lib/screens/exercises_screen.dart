@@ -9,16 +9,23 @@ import 'exercise_detail_screen.dart';
 /// Small trend state for the exercise list.
 enum _MiniTrend { up, down, stable, none }
 
+double _estimate1RM(double weight, int reps) {
+  final r = reps.clamp(1, 30);
+  return weight * (1.0 + r / 30.0);
+}
+
 class ExercisesScreen extends StatelessWidget {
   final List<Exercise> exercises;
   final List<WorkoutSession> sessions;
   final void Function(Exercise) onAddExercise;
+  final void Function(Exercise) onUpdateExercise;
 
   const ExercisesScreen({
     super.key,
     required this.exercises,
     required this.sessions,
     required this.onAddExercise,
+    required this.onUpdateExercise,
   });
 
   // ------- Progress / trend helpers -------
@@ -103,10 +110,32 @@ class ExercisesScreen extends StatelessWidget {
       case _MiniTrend.none:
         return null;
     }
-    // Fallback for analyzer happiness (should never hit)
-    // because all enum cases are covered above.
-    // ignore: dead_code
-    return null;
+  }
+
+  /// Progress towards goal based on estimated 1RM, 0..1 or null if no goal.
+  double? _goalProgressForExercise(Exercise exercise) {
+    final gw = exercise.goalWeight;
+    final gr = exercise.goalReps;
+    if (gw == null || gr == null || gw <= 0 || gr <= 0) return null;
+
+    final goal1rm = _estimate1RM(gw, gr);
+    if (goal1rm <= 0) return null;
+
+    double best1rm = 0;
+
+    for (final s in sessions) {
+      for (final we in s.exercises) {
+        if (we.exercise.id != exercise.id) continue;
+        for (final set in we.sets) {
+          if (set.weight == null) continue;
+          final est = _estimate1RM(set.weight!, set.reps);
+          if (est > best1rm) best1rm = est;
+        }
+      }
+    }
+
+    if (best1rm <= 0) return 0.0;
+    return (best1rm / goal1rm).clamp(0.0, 1.0);
   }
 
   // ------- Add exercise dialog -------
@@ -116,7 +145,7 @@ class ExercisesScreen extends StatelessWidget {
     final subGroupController = TextEditingController();
 
     BodyRegion selectedRegion = BodyRegion.upper;
-    MuscleGroup selectedGroup = MuscleGroup.chest;
+    MuscleGroup selectedGroup = MuscleGroup.midChest;
 
     showDialog(
       context: context,
@@ -156,7 +185,7 @@ class ExercisesScreen extends StatelessWidget {
                     DropdownButtonFormField<MuscleGroup>(
                       value: selectedGroup,
                       decoration: const InputDecoration(
-                        labelText: 'Muscle group',
+                        labelText: 'Primary muscle',
                       ),
                       items: MuscleGroup.values.map((g) {
                         return DropdownMenuItem(
@@ -173,8 +202,8 @@ class ExercisesScreen extends StatelessWidget {
                     TextField(
                       controller: subGroupController,
                       decoration: const InputDecoration(
-                        labelText: 'Sub-group (optional)',
-                        hintText: 'e.g. Rear delts, Quads',
+                        labelText: 'Extra info (optional)',
+                        hintText: 'e.g. Neutral grip, Cable, etc.',
                       ),
                     ),
                   ],
@@ -234,6 +263,39 @@ class ExercisesScreen extends StatelessWidget {
           final trend = _computeMiniTrend(series);
           final trendIcon = _buildTrendIcon(trend, theme);
 
+          final goalProgress = _goalProgressForExercise(e);
+          Widget trailing;
+
+          if (trendIcon == null && goalProgress == null) {
+            trailing = const SizedBox.shrink();
+          } else {
+            trailing = Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (trendIcon != null) trendIcon,
+                if (goalProgress != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.flag_outlined,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${(goalProgress * 100).round()}%',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+          }
+
           return Card(
             child: ListTile(
               title: Text(e.name),
@@ -241,13 +303,14 @@ class ExercisesScreen extends StatelessWidget {
                 '${bodyRegionLabel(e.region)} • ${muscleGroupLabel(e.group)}'
                 '${e.subGroup != null ? ' • ${e.subGroup}' : ''}',
               ),
-              trailing: trendIcon,
+              trailing: trailing,
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => ExerciseDetailScreen(
                       exercise: e,
                       sessions: sessions,
+                      onUpdateExercise: onUpdateExercise,
                     ),
                   ),
                 );

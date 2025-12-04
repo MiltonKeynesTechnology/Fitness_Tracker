@@ -8,40 +8,81 @@ import 'screens/today_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/exercises_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/settings_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialise Hive and open a box for our training data
   await Hive.initFlutter();
-  final box = await Hive.openBox('training');
+  final box = await Hive.openBox('training_v2');
 
   runApp(TrainingTrackerApp(box: box));
 }
 
-class TrainingTrackerApp extends StatelessWidget {
+// TOP-LEVEL APP W/ THEME CONTROL
+class TrainingTrackerApp extends StatefulWidget {
   final Box box;
 
   const TrainingTrackerApp({super.key, required this.box});
 
   @override
+  State<TrainingTrackerApp> createState() => _TrainingTrackerAppState();
+}
+
+class _TrainingTrackerAppState extends State<TrainingTrackerApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  void _setThemeMode(ThemeMode mode) {
+    setState(() {
+      _themeMode = mode;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final lightTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: Brightness.light,
+      ),
+    );
+
+    final darkTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: Brightness.dark,
+      ),
+    );
+
     return MaterialApp(
       title: 'Training Tracker',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        // brightness: Brightness.dark, // uncomment if you prefer dark theme
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: _themeMode,
+      home: HomeScreen(
+        box: widget.box,
+        themeMode: _themeMode,
+        onThemeModeChanged: _setThemeMode,
       ),
-      home: HomeScreen(box: box),
     );
   }
 }
 
+// HOME + BOTTOM NAV
 class HomeScreen extends StatefulWidget {
   final Box box;
+  final ThemeMode themeMode;
+  final void Function(ThemeMode) onThemeModeChanged;
 
-  const HomeScreen({super.key, required this.box});
+  const HomeScreen({
+    super.key,
+    required this.box,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -60,21 +101,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _loadFromHive() {
-    final exList = widget.box.get('exercises') as List?;
-    final sesList = widget.box.get('sessions') as List?;
+    try {
+      final exList = widget.box.get('exercises') as List?;
+      final sesList = widget.box.get('sessions') as List?;
 
-    // If no exercises saved yet, start with defaultExercises
-    _exercises = exList == null || exList.isEmpty
-        ? List.of(defaultExercises)
-        : exList
-            .map((m) => Exercise.fromMap(m as Map))
-            .toList();
+      // If no exercises saved yet, start with defaultExercises
+      _exercises = exList == null || exList.isEmpty
+          ? List.of(defaultExercises)
+          : exList
+              .map((m) => Exercise.fromMap(m as Map))
+              .toList();
 
-    _sessions = sesList == null
-        ? []
-        : sesList
-            .map((m) => WorkoutSession.fromMap(m as Map))
-            .toList();
+      _sessions = sesList == null
+          ? []
+          : sesList
+              .map((m) => WorkoutSession.fromMap(m as Map))
+              .toList();
+    } catch (e) {
+      // If anything goes wrong (old data format, enum index out of range, null cast, etc),
+      // reset to a clean state so the app can still launch.
+      _exercises = List.of(defaultExercises);
+      _sessions = [];
+      widget.box.clear(); // clear corrupted / incompatible data
+    }
   }
 
   Future<void> _saveToHive() async {
@@ -129,6 +178,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onUpdateExercise(Exercise updated) {
+    setState(() {
+      // update master exercise list
+      final index = _exercises.indexWhere((e) => e.id == updated.id);
+      if (index != -1) {
+        _exercises[index] = updated;
+      }
+
+      // also update embedded copies inside past sessions
+      for (final session in _sessions) {
+        for (var i = 0; i < session.exercises.length; i++) {
+          final we = session.exercises[i];
+          if (we.exercise.id == updated.id) {
+            session.exercises[i] = WorkoutExercise(
+              id: we.id,
+              exercise: updated,
+              sets: we.sets,
+            );
+          }
+        }
+      }
+    });
+    _saveToHive();
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -148,9 +222,15 @@ class _HomeScreenState extends State<HomeScreen> {
         exercises: _exercises,
         sessions: _sessions,
         onAddExercise: _onAddExercise,
+        onUpdateExercise: _onUpdateExercise,
       ),
       StatsScreen(
         sessions: _sessions,
+        onClearAll: _clearAllData,
+      ),
+      SettingsScreen(
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
         onClearAll: _clearAllData,
       ),
     ];
@@ -181,6 +261,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.insights),
             label: 'Stats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
