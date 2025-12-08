@@ -1,82 +1,151 @@
 // lib/data.dart
+
 import 'models.dart';
 
+/// Default exercises, each targeting a specific primary muscle.
 final List<Exercise> defaultExercises = [
+  // --- CHEST ---
   Exercise(
-    id: 'bench_press',
+    id: 'bench_barbell_flat',
     name: 'Barbell Bench Press',
     region: BodyRegion.upper,
-    group: MuscleGroup.chest,
-    subGroup: 'Mid chest',
+    group: MuscleGroup.midChest,
+    subGroup: 'Pecs',
   ),
   Exercise(
-    id: 'incline_db_press',
+    id: 'incline_dumbbell_press',
     name: 'Incline Dumbbell Press',
     region: BodyRegion.upper,
-    group: MuscleGroup.chest,
-    subGroup: 'Upper chest',
+    group: MuscleGroup.upperChest,
+    subGroup: 'Pecs',
   ),
   Exercise(
-    id: 'ohp',
-    name: 'Overhead Press',
+    id: 'decline_barbell_press',
+    name: 'Decline Barbell Press',
     region: BodyRegion.upper,
-    group: MuscleGroup.shoulders,
+    group: MuscleGroup.lowerChest,
+    subGroup: 'Pecs',
+  ),
+
+  // --- BACK ---
+  Exercise(
+    id: 'lat_pulldown',
+    name: 'Lat Pulldown',
+    region: BodyRegion.upper,
+    group: MuscleGroup.lats,
+    subGroup: 'Lats',
+  ),
+  Exercise(
+    id: 'seated_cable_row',
+    name: 'Seated Cable Row',
+    region: BodyRegion.upper,
+    group: MuscleGroup.midBack,
+    subGroup: 'Mid back',
+  ),
+  Exercise(
+    id: 'barbell_row',
+    name: 'Barbell Row',
+    region: BodyRegion.upper,
+    group: MuscleGroup.upperBack,
+    subGroup: 'Upper / mid back',
+  ),
+
+  // --- SHOULDERS ---
+  Exercise(
+    id: 'ohp_barbell',
+    name: 'Overhead Barbell Press',
+    region: BodyRegion.upper,
+    group: MuscleGroup.frontDelts,
     subGroup: 'Front delts',
   ),
   Exercise(
-    id: 'lat_raise',
+    id: 'lateral_raise',
     name: 'Dumbbell Lateral Raise',
     region: BodyRegion.upper,
-    group: MuscleGroup.shoulders,
+    group: MuscleGroup.sideDelts,
     subGroup: 'Side delts',
   ),
   Exercise(
     id: 'rear_delt_fly',
     name: 'Rear Delt Fly',
     region: BodyRegion.upper,
-    group: MuscleGroup.shoulders,
+    group: MuscleGroup.rearDelts,
     subGroup: 'Rear delts',
   ),
+
+  // --- ARMS ---
   Exercise(
-    id: 'pull_up',
-    name: 'Pull-up',
-    region: BodyRegion.upper,
-    group: MuscleGroup.back,
-    subGroup: 'Lats',
-  ),
-  Exercise(
-    id: 'bb_row',
-    name: 'Barbell Row',
-    region: BodyRegion.upper,
-    group: MuscleGroup.back,
-    subGroup: 'Mid back',
-  ),
-  Exercise(
-    id: 'squat',
-    name: 'Barbell Back Squat',
-    region: BodyRegion.lower,
-    group: MuscleGroup.legs,
-    subGroup: 'Quads/Glutes',
-  ),
-  Exercise(
-    id: 'rdl',
-    name: 'Romanian Deadlift',
-    region: BodyRegion.lower,
-    group: MuscleGroup.legs,
-    subGroup: 'Hamstrings/Glutes',
-  ),
-  Exercise(
-    id: 'bb_curl',
+    id: 'barbell_curl',
     name: 'Barbell Curl',
     region: BodyRegion.upper,
-    group: MuscleGroup.arms,
+    group: MuscleGroup.biceps,
     subGroup: 'Biceps',
   ),
   Exercise(
     id: 'tricep_pushdown',
-    name: 'Cable Tricep Pushdown',
+    name: 'Tricep Pushdown',
     region: BodyRegion.upper,
-    group: MuscleGroup.arms,
+    group: MuscleGroup.triceps,
     subGroup: 'Triceps',
+  ),
+  Exercise(
+    id: 'hammer_curl',
+    name: 'Hammer Curl',
+    region: BodyRegion.upper,
+    group: MuscleGroup.forearms,
+    subGroup: 'Forearms / brachialis',
+  ),
+
+  // --- CORE ---
+  Exercise(
+    id: 'crunch',
+    name: 'Crunches',
+    region: BodyRegion.full,
+    group: MuscleGroup.upperAbs,
+    subGroup: 'Upper abs',
+  ),
+  Exercise(
+    id: 'leg_raise',
+    name: 'Hanging Leg Raise',
+    region: BodyRegion.full,
+    group: MuscleGroup.lowerAbs,
+    subGroup: 'Lower abs',
+  ),
+  Exercise(
+    id: 'side_plank',
+    name: 'Side Plank',
+    region: BodyRegion.full,
+    group: MuscleGroup.obliques,
+    subGroup: 'Obliques',
+  ),
+
+  // --- LOWER BODY ---
+  Exercise(
+    id: 'squat_barbell',
+    name: 'Barbell Squat',
+    region: BodyRegion.lower,
+    group: MuscleGroup.quads,
+    subGroup: 'Quads / glutes',
+  ),
+  Exercise(
+    id: 'romanian_deadlift',
+    name: 'Romanian Deadlift',
+    region: BodyRegion.lower,
+    group: MuscleGroup.hamstrings,
+    subGroup: 'Hamstrings',
+  ),
+  Exercise(
+    id: 'hip_thrust',
+    name: 'Barbell Hip Thrust',
+    region: BodyRegion.lower,
+    group: MuscleGroup.glutes,
+    subGroup: 'Glutes',
+  ),
+  Exercise(
+    id: 'calf_raise',
+    name: 'Standing Calf Raise',
+    region: BodyRegion.lower,
+    group: MuscleGroup.calves,
+    subGroup: 'Calves',
   ),
 ];
