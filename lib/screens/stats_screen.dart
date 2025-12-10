@@ -52,11 +52,15 @@ class _LiftTrendResult {
 
 class StatsScreen extends StatefulWidget {
   final List<WorkoutSession> sessions;
+  final List<MealEntry> meals;
+  final NutritionGoal? nutritionGoal;
   final Future<void> Function() onClearAll;
 
   const StatsScreen({
     super.key,
     required this.sessions,
+    required this.meals,
+    required this.nutritionGoal,
     required this.onClearAll,
   });
 
@@ -132,7 +136,7 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // ---------- EXERCISE LIST & TREND DATA (Stats graphs) ----------
+  // ---------- EXERCISE LIST & TREND DATA ----------
 
   List<Exercise> _availableExercises(List<WorkoutSession> sessions) {
     final map = <String, Exercise>{};
@@ -189,7 +193,7 @@ class _StatsScreenState extends State<StatsScreen> {
   Future<void> _exportCsv(List<WorkoutSession> sessions) async {
     final buffer = StringBuffer();
     buffer.writeln(
-        'Date,Workout Name,Exercise,Muscle Group,Reps,Weight,Volume');
+        'Date,Workout Name,Exercise,Muscle,Reps,Weight,Volume');
 
     for (final s in sessions) {
       final dateStr =
@@ -402,7 +406,7 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // ---------- BODY HEATMAP (BLOCKS) ----------
+  // ---------- BODY HEATMAP (PER MUSCLE) ----------
 
   Color _intensityColorFor(
     Map<MuscleGroup, int> muscleData,
@@ -434,107 +438,150 @@ class _StatsScreenState extends State<StatsScreen> {
   ) {
     final theme = Theme.of(context);
 
-    Widget muscleBlock(String label, MuscleGroup group) {
-      final color = _intensityColorFor(muscleData, group);
-      return Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.outline.withOpacity(0.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
+    final ordered = <MuscleGroup>[
+      // Chest
+      MuscleGroup.upperChest,
+      MuscleGroup.midChest,
+      MuscleGroup.lowerChest,
+
+      // Back
+      MuscleGroup.lats,
+      MuscleGroup.upperBack,
+      MuscleGroup.midBack,
+      MuscleGroup.lowerBack,
+
+      // Shoulders
+      MuscleGroup.frontDelts,
+      MuscleGroup.sideDelts,
+      MuscleGroup.rearDelts,
+
+      // Arms
+      MuscleGroup.biceps,
+      MuscleGroup.triceps,
+      MuscleGroup.forearms,
+
+      // Core
+      MuscleGroup.upperAbs,
+      MuscleGroup.lowerAbs,
+      MuscleGroup.obliques,
+      MuscleGroup.spinalErectors,
+
+      // Lower body
+      MuscleGroup.glutes,
+      MuscleGroup.quads,
+      MuscleGroup.hamstrings,
+      MuscleGroup.calves,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Body heatmap (by sets)',
+          'Muscle heatmap (sets in selected range)',
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Shoulders
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Shoulders', MuscleGroup.shoulders),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Chest / Back
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Chest', MuscleGroup.chest),
-                  const SizedBox(width: 16),
-                  muscleBlock('Back', MuscleGroup.back),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Arms
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Arms', MuscleGroup.arms),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Core
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Core', MuscleGroup.core),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Glutes / Legs / Calves
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Glutes', MuscleGroup.glutes),
-                  const SizedBox(width: 16),
-                  muscleBlock('Legs', MuscleGroup.legs),
-                  const SizedBox(width: 16),
-                  muscleBlock('Calves', MuscleGroup.calves),
-                ],
-              ),
-            ],
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: ordered.map((m) {
+            final color = _intensityColorFor(muscleData, m);
+            final sets = muscleData[m] ?? 0;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    muscleGroupLabel(m),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                if (sets > 0)
+                  Text(
+                    '$sets sets',
+                    style: theme.textTheme.labelSmall,
+                  ),
+              ],
+            );
+          }).toList(),
         ),
         const SizedBox(height: 12),
         Text(
-          'Intensity: white = low, yellow = medium, red = high (per muscle group in selected time range).',
+          'Intensity: white = low, yellow = medium, red = high for that muscle '
+          'in the selected time range.',
           style: theme.textTheme.bodySmall,
         ),
       ],
     );
   }
 
+  // ---------- NUTRITION-AWARE RECOVERY HELPERS ----------
+
+  DateTime _dayKey(DateTime dt) =>
+      DateTime(dt.year, dt.month, dt.day);
+
+  Map<DateTime, double> _computeDailyProtein(
+    List<MealEntry> meals,
+  ) {
+    final map = <DateTime, double>{};
+    for (final m in meals) {
+      if (m.protein == null) continue;
+      final day = _dayKey(m.dateTime);
+      map[day] = (map[day] ?? 0) + m.protein!;
+    }
+    return map;
+  }
+
+  double _proteinFactorForDay(
+    DateTime day,
+    Map<DateTime, double> dailyProtein,
+    NutritionGoal? goal,
+  ) {
+    if (goal == null || goal.protein == null || goal.protein! <= 0) {
+      // no goal set → neutral
+      return 1.0;
+    }
+
+    final total = dailyProtein[day] ?? 0.0;
+    final ratio = total / goal.protein!;
+
+    // Simple heuristic:
+    // ≥ 100% of goal → slightly better recovery
+    // 60–100%        → neutral
+    // < 60%          → slightly worse recovery
+    if (ratio >= 1.0) return 1.2;
+    if (ratio >= 0.6) return 1.0;
+    return 0.8;
+  }
+
   // ---------- RECOVERY / FATIGUE LOGIC ----------
 
   Map<MuscleGroup, _RecoveryInfo> _computeRecovery(
     List<WorkoutSession> allSessions,
+    List<MealEntry> allMeals,
+    NutritionGoal? goal,
   ) {
     final now = DateTime.now();
     const tauDays = 2.0; // recovery time constant ~2 days
+
+    final dailyProtein = _computeDailyProtein(allMeals);
 
     final Map<MuscleGroup, List<Map<String, dynamic>>> loadsByGroup = {};
 
@@ -599,7 +646,12 @@ class _StatsScreenState extends State<StatsScreen> {
         final normalizedLoad = avgLoad > 0 ? load / avgLoad : 1.0;
         final decay = math.exp(-daysAgo / tauDays);
 
-        score += normalizedLoad * decay;
+        final dayKey = _dayKey(date);
+        final protFactor =
+            _proteinFactorForDay(dayKey, dailyProtein, goal);
+        final recoveryFactor = 1.0 / protFactor;
+
+        score += normalizedLoad * decay * recoveryFactor;
       }
 
       RecoveryStatus status;
@@ -672,12 +724,12 @@ class _StatsScreenState extends State<StatsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recovery status (based on recent load)',
+          'Recovery status (per muscle)',
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 4),
         Text(
-          'Higher score = more fatigue. Uses all your past workouts with an exponential decay (~2 days).',
+          'Higher score = more fatigue. Uses all your past workouts with an exponential decay (~2 days) and adjusts for protein intake.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
@@ -849,6 +901,110 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ---------- COACH HINTS ----------
+
+  Widget _buildCoachHints(
+    BuildContext context,
+    Map<MuscleGroup, _RecoveryInfo> recData,
+    Map<MuscleGroup, int> muscleData,
+  ) {
+    final theme = Theme.of(context);
+
+    if (recData.isEmpty && muscleData.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final fresh = <MuscleGroup>[];
+    final fatigued = <MuscleGroup>[];
+    final untrained = <MuscleGroup>[];
+
+    for (final group in MuscleGroup.values) {
+      final info = recData[group];
+      final sets = muscleData[group] ?? 0;
+
+      if (info == null && sets == 0) {
+        untrained.add(group);
+      } else if (info != null) {
+        switch (info.status) {
+          case RecoveryStatus.fresh:
+            fresh.add(group);
+            break;
+          case RecoveryStatus.fatigued:
+            fatigued.add(group);
+            break;
+          case RecoveryStatus.ok:
+            break;
+        }
+      }
+    }
+
+    if (fresh.isEmpty && fatigued.isEmpty && untrained.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget chipsFor(List<MuscleGroup> groups, Color color) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: groups
+            .map(
+              (g) => Chip(
+                label: Text(muscleGroupLabel(g)),
+                backgroundColor: color.withOpacity(0.12),
+                side: BorderSide(color: color.withOpacity(0.6)),
+                labelStyle: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Coach hints',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Based on your recent load (all time), sets in this selected range, and protein intake vs your goal.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+
+        if (fresh.isNotEmpty || untrained.isNotEmpty) ...[
+          Text(
+            'Recommended focus today',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            [...fresh, ...untrained],
+            Colors.green.shade600,
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        if (fatigued.isNotEmpty) ...[
+          Text(
+            'Consider going lighter',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            fatigued,
+            Colors.red.shade600,
+          ),
+        ],
+      ],
+    );
+  }
+
   // ---------- BUILD ----------
 
   @override
@@ -907,8 +1063,11 @@ class _StatsScreenState extends State<StatsScreen> {
         ? <_ExerciseTrendPoint>[]
         : _exerciseTrendData(filtered, selectedExercise.id);
 
-    // Recovery + top lifts use ALL sessions
-    final recoveryData = _computeRecovery(widget.sessions);
+    final recoveryData = _computeRecovery(
+      widget.sessions,
+      widget.meals,
+      widget.nutritionGoal,
+    );
     final topLifts = _computeTopImprovingLifts(widget.sessions);
 
     return Padding(
@@ -963,15 +1122,15 @@ class _StatsScreenState extends State<StatsScreen> {
           Expanded(
             child: ListView(
               children: [
-                // --- Sets per muscle group ---
+                // --- Sets per muscle ---
                 Text(
-                  'Sets per muscle group',
+                  'Sets per muscle',
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
                 if (muscleData.isEmpty)
                   const Text(
-                      'No muscle-group data for this range.\n(You may have workouts with zero sets.)')
+                      'No muscle data for this range.\n(You may have workouts with zero sets.)')
                 else
                   Column(
                     children: muscleData.entries.map((entry) {
@@ -1012,6 +1171,10 @@ class _StatsScreenState extends State<StatsScreen> {
                 _buildRecoverySection(context, recoveryData),
                 const SizedBox(height: 24),
 
+                // --- Coach hints ---
+                _buildCoachHints(context, recoveryData, muscleData),
+                const SizedBox(height: 24),
+
                 // --- Top improving lifts ---
                 _buildTopImprovingLiftsSection(context, topLifts),
                 if (topLifts.isNotEmpty)
@@ -1038,7 +1201,6 @@ class _StatsScreenState extends State<StatsScreen> {
                     ),
                   const SizedBox(height: 8),
 
-                  // Max weight
                   Text(
                     'Max weight over time',
                     style: theme.textTheme.bodySmall,
@@ -1054,7 +1216,6 @@ class _StatsScreenState extends State<StatsScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Volume
                   Text(
                     'Volume (weight × reps) over time',
                     style: theme.textTheme.bodySmall,
