@@ -644,3 +644,25 @@ class SupplementEntry {
     );
   }
 }
+
+class DailyEnergyEntry {
+  final DateTime date;     // date only (no time)
+  final int burnedKcal;
+
+  DailyEnergyEntry({
+    required this.date,
+    required this.burnedKcal,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'date': date.toIso8601String(),
+        'burnedKcal': burnedKcal,
+      };
+
+  factory DailyEnergyEntry.fromMap(Map map) {
+    return DailyEnergyEntry(
+      date: DateTime.parse(map['date'] as String),
+      burnedKcal: map['burnedKcal'] as int,
+    );
+  }
+}

@@ -692,6 +692,8 @@ class NutritionScreen extends StatelessWidget {
     final NutritionGoal? goal = nutritionGoal;
     final int? goalCalories = goal?.calories;
 
+    final int burned = burnedToday ?? 0;
+
     // 🔹 local mode for the "Consumed / Remaining" toggle
     EnergyViewMode energyMode = EnergyViewMode.consumed;
 
@@ -765,32 +767,32 @@ class NutritionScreen extends StatelessWidget {
     const double _macroChartSize = 110.0; // use same size for ring + pie
 
     Widget buildCalorieRing(EnergyViewMode mode) {
-      final goalCals = goalCalories;
       final colorScheme = theme.colorScheme;
 
-      double progressConsumed = 0;
-      double progressRemaining = 0;
-      int remaining = 0;
+      final int? baseGoal = goalCalories;                 // nullable
+      final bool hasGoal = baseGoal != null && baseGoal > 0;
 
-      if (goalCals != null && goalCals > 0) {
-        progressConsumed =
-            (totalCalories / goalCals).clamp(0.0, 1.0);
-        remaining = goalCals - totalCalories;
-        if (remaining < 0) remaining = 0;
-        progressRemaining =
-            (remaining / goalCals).clamp(0.0, 1.0);
-      }
+      // If there is a goal, extend it by burned kcal.
+      // If not, just scale to today's intake so we avoid div-by-zero.
+      final int adjustedGoal = hasGoal
+          ? baseGoal! + burned
+          : (totalCalories > 0 ? totalCalories : 1);
+
+      final int remaining =
+          (adjustedGoal - totalCalories).clamp(0, adjustedGoal) as int;
+
+      final double progressConsumed =
+          (totalCalories / adjustedGoal).clamp(0.0, 1.0).toDouble();
+      final double progressRemaining =
+          (remaining / adjustedGoal).clamp(0.0, 1.0).toDouble();
 
       final bool isConsumed = mode == EnergyViewMode.consumed;
       final double ringProgress =
           isConsumed ? progressConsumed : progressRemaining;
-      final int displayKcal =
-          isConsumed ? totalCalories : remaining;
-      final String subtitle =
-          isConsumed ? 'kcal' : 'kcal left';
+      final int displayKcal = isConsumed ? totalCalories : remaining;
+      final String subtitle = isConsumed ? 'kcal' : 'kcal left';
 
-      final ringColor =
-          _calorieColor(progressConsumed); // colour by % eaten
+      final ringColor = _calorieColor(progressConsumed); // same gradient
 
       return SizedBox(
         width: _macroChartSize,
@@ -800,8 +802,8 @@ class NutritionScreen extends StatelessWidget {
           children: [
             SizedBox.expand(
               child: CircularProgressIndicator(
-                value: goalCals == null ? 0 : ringProgress,
-                strokeWidth: _macroChartSize * 0.05,
+                value: ringProgress,
+                strokeWidth: _macroChartSize * 0.18,
                 valueColor: AlwaysStoppedAnimation<Color>(ringColor),
                 backgroundColor: colorScheme.surfaceVariant,
               ),
@@ -819,9 +821,9 @@ class NutritionScreen extends StatelessWidget {
                   subtitle,
                   style: theme.textTheme.bodyMedium,
                 ),
-                if (goalCals != null)
+                if (hasGoal)
                   Text(
-                    '/ $goalCals',
+                    '/ $adjustedGoal',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -1035,12 +1037,14 @@ class NutritionScreen extends StatelessWidget {
                 final bool isConsumed =
                     energyMode == EnergyViewMode.consumed;
 
-                final int? rawRemaining =
-                    goalCalories == null ? null : (goalCalories - totalCalories);
-                final int remainingClamped =
-                    rawRemaining == null
-                        ? 0
-                        : (rawRemaining < 0 ? 0 : rawRemaining);
+                int adjustedGoalLocal = 0;
+                int remainingClamped = 0;
+
+                if (goalCalories != null && goalCalories! > 0) {
+                  adjustedGoalLocal = goalCalories! + burned;
+                  final rawRemaining = adjustedGoalLocal - totalCalories;
+                  remainingClamped = rawRemaining < 0 ? 0 : rawRemaining;
+                }
 
                 return Padding(
                   padding: const EdgeInsets.all(16),
@@ -1112,8 +1116,8 @@ class NutritionScreen extends StatelessWidget {
                             ),
                             Text(
                               isConsumed
-                                  ? '$totalCalories / $goalCalories kcal'
-                                  : '$remainingClamped / $goalCalories kcal',
+                                  ? '$totalCalories / $adjustedGoalLocal kcal'
+                                  : '$remainingClamped / $adjustedGoalLocal kcal',
                               style: theme.textTheme.bodyMedium,
                             ),
                           ],
@@ -1207,6 +1211,89 @@ class NutritionScreen extends StatelessWidget {
           buildWeeklyCaloriesChart(),
 
           const SizedBox(height: 16),
+
+                    // 🔥 Burned & balance card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Burned & balance',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      // mini burned ring
+                      SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: CircularProgressIndicator(
+                          value: goalCalories == null || goalCalories <= 0
+                              ? null
+                              : (burned / goalCalories!.toDouble())
+                                  .clamp(0.0, 1.0),
+                          strokeWidth: 8,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Burned today: $burned kcal'),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Net: ${totalCalories - burned} kcal '
+                              '(${totalCalories} in – $burned out)',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            if (goalCalories != null) ...[
+                              const SizedBox(height: 4),
+                              Builder(
+                                builder: (_) {
+                                  final int adjustedGoal =
+                                      goalCalories! + burned;
+                                  final int remainingVsAdjusted =
+                                      (adjustedGoal - totalCalories) < 0
+                                          ? 0
+                                          : (adjustedGoal - totalCalories);
+                                  return Text(
+                                    'Remaining vs goal: '
+                                    '$remainingVsAdjusted kcal',
+                                    style: theme.textTheme.bodySmall,
+                                  );
+                                },
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  _showEditBurnedDialog(
+                                    context,
+                                    burned,
+                                    onUpdateBurnedToday,
+                                  );
+                                },
+                                child: const Text('Edit burned today'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
 
           // Today's supplements
           Text(
@@ -1605,4 +1692,54 @@ class _MacroBreakdownPainter extends CustomPainter {
         oldDelegate.colors != colors;
   }
 }
+
+Future<void> _showEditBurnedDialog(
+  BuildContext context,
+  int current,
+  void Function(int) onUpdate,
+) async {
+  final controller = TextEditingController(text: current.toString());
+  int? _parseInt(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return null;
+    return int.tryParse(t.replaceAll(',', ''));
+  }
+
+  final result = await showDialog<int>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Calories burned today'),
+      content: TextField(
+        controller: controller,
+        keyboardType:
+            const TextInputType.numberWithOptions(decimal: false),
+        decoration: const InputDecoration(
+          labelText: 'Burned (kcal)',
+          hintText: 'e.g. 500',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final val = _parseInt(controller.text) ?? 0;
+            Navigator.of(ctx).pop(val);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+
+  if (result != null) {
+    onUpdate(result);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Burned calories updated.')),
+    );
+  }
+}
+
 
