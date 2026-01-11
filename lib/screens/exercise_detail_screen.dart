@@ -6,26 +6,40 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../models.dart';
 
-class ExerciseDetailScreen extends StatelessWidget {
+class ExerciseDetailScreen extends StatefulWidget {
   final Exercise exercise;
   final List<WorkoutSession> sessions;
+  final void Function(Exercise updated) onUpdateExercise;
 
   const ExerciseDetailScreen({
     super.key,
     required this.exercise,
     required this.sessions,
+    required this.onUpdateExercise,
   });
 
   @override
+  State<ExerciseDetailScreen> createState() => _ExerciseDetailScreenState();
+}
+
+class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
+  late Exercise _exercise;
+
+  @override
+  void initState() {
+    super.initState();
+    _exercise = widget.exercise;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // All sessions that include this exercise
-    final filtered = sessions
+    final filtered = widget.sessions
         .where((s) =>
-            s.exercises.any((we) => we.exercise.id == exercise.id))
+            s.exercises.any((we) => we.exercise.id == _exercise.id))
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
 
-    final data = _buildTrendData(filtered, exercise.id);
+    final data = _buildTrendData(filtered, _exercise.id);
 
     final theme = Theme.of(context);
 
@@ -35,21 +49,36 @@ class ExerciseDetailScreen extends StatelessWidget {
     final weightTrend = _computeTrend(weightValues);
     final volumeTrend = _computeTrend(volumeValues);
 
-    final prInfo = _computePrInfo(weightValues);
+    final prInfo = _computePrInfo(_exercise, weightValues);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(exercise.name),
+        title: Text(_exercise.name),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: filtered.isEmpty
-            ? const Center(
-                child: Text('No sets logged for this exercise yet.'),
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTopButtons(context),
+                  const SizedBox(height: 16),
+                  _buildGoalSection(context),
+                  const SizedBox(height: 24),
+                  const Center(
+                    child:
+                        Text('No sets logged for this exercise yet.'),
+                  ),
+                ],
               )
             : ListView(
                 children: [
-                  // -------- PROGRESSION SUMMARY --------
+                  _buildTopButtons(context),
+                  const SizedBox(height: 16),
+
+                  _buildGoalSection(context),
+                  const SizedBox(height: 24),
+
                   Text(
                     'Progression summary',
                     style: theme.textTheme.titleMedium,
@@ -61,7 +90,6 @@ class ExerciseDetailScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Strength (max weight) trend
                           _buildTrendRow(
                             context: context,
                             label: 'Strength (max weight)',
@@ -69,8 +97,6 @@ class ExerciseDetailScreen extends StatelessWidget {
                             unit: 'kg',
                           ),
                           const SizedBox(height: 8),
-
-                          // Volume trend
                           _buildTrendRow(
                             context: context,
                             label: 'Volume (weight × reps)',
@@ -78,8 +104,6 @@ class ExerciseDetailScreen extends StatelessWidget {
                             unit: '',
                           ),
                           const SizedBox(height: 8),
-
-                          // PR info
                           if (prInfo != null)
                             Text(
                               prInfo,
@@ -101,7 +125,6 @@ class ExerciseDetailScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // -------- MAX WEIGHT CHART --------
                   Text(
                     'Max weight over time',
                     style: theme.textTheme.titleMedium,
@@ -118,7 +141,6 @@ class ExerciseDetailScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // -------- VOLUME CHART --------
                   Text(
                     'Volume (weight × reps) over time',
                     style: theme.textTheme.titleMedium,
@@ -137,9 +159,326 @@ class ExerciseDetailScreen extends StatelessWidget {
       ),
     );
   }
+
+  // ---- TOP BUTTONS (PR + GOAL) ----
+
+  Widget _buildTopButtons(BuildContext context) {
+    final theme = Theme.of(context);
+    final pr = _exercise.manualPr;
+
+    return Row(
+      children: [
+        FilledButton.icon(
+          onPressed: () => _showSetPrDialog(context),
+          icon: const Icon(Icons.emoji_events_outlined),
+          label: const Text('Set existing PR'),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: () => _showSetGoalDialog(context),
+          icon: const Icon(Icons.flag_outlined),
+          label: const Text('Set goal'),
+        ),
+        const SizedBox(width: 12),
+        if (pr != null)
+          Expanded(
+            child: Text(
+              'Manual PR: ${pr.toStringAsFixed(1)} kg',
+              style: theme.textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showSetPrDialog(BuildContext context) async {
+    final controller = TextEditingController(
+      text: _exercise.manualPr?.toStringAsFixed(1) ?? '',
+    );
+
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Set existing PR'),
+          content: TextField(
+            controller: controller,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'PR weight (kg)',
+              hintText: 'e.g. 120',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  Navigator.of(ctx).pop(null);
+                  return;
+                }
+                final value = double.tryParse(text);
+                Navigator.of(ctx).pop(value);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    final updated = _exercise.copyWith(manualPr: result);
+
+    setState(() {
+      _exercise = updated;
+    });
+
+    widget.onUpdateExercise(updated);
+  }
+
+  // ---- GOAL SECTION (estimated 1RM) ----
+
+  Widget _buildGoalSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final goalWeight = _exercise.goalWeight;
+    final goalReps = _exercise.goalReps;
+
+    final bestSet = _computeBestSet();
+
+    if (goalWeight == null || goalReps == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Goal',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'No goal set yet. Tap "Set goal" above to define a target '
+                'weight and reps (e.g. 100 kg × 5).',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final goalEst1RM = _estimate1RM(goalWeight, goalReps);
+
+    if (bestSet == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Goal',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Goal: ${goalWeight.toStringAsFixed(1)} kg × $goalReps reps',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'No weighted sets logged yet. '
+                'Once you log sets, progress will be based on estimated 1RM '
+                '(heavier low-rep sets count more than light high-rep sets).',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bestEst1RM = bestSet.est1rm;
+
+    final progressRaw = bestEst1RM / goalEst1RM;
+    final progressClamped = progressRaw.clamp(0.0, 1.0);
+    final progressPct = progressRaw * 100;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Goal',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Goal: ${goalWeight.toStringAsFixed(1)} kg × $goalReps reps',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Best set logged: '
+              '${bestSet.weight.toStringAsFixed(1)} kg × ${bestSet.reps} reps\n'
+              'Best estimated 1RM: ${bestEst1RM.toStringAsFixed(1)} kg\n'
+              'Goal estimated 1RM: ${goalEst1RM.toStringAsFixed(1)} kg\n'
+              'Progress: ${progressPct.toStringAsFixed(1)}% towards goal '
+              '(based on estimated 1RM).',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: progressClamped,
+                minHeight: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSetGoalDialog(BuildContext context) async {
+    final weightController = TextEditingController(
+      text: _exercise.goalWeight?.toStringAsFixed(1) ?? '',
+    );
+    final repsController = TextEditingController(
+      text: _exercise.goalReps?.toString() ?? '',
+    );
+
+    final result = await showDialog<Map<String, dynamic>?>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Set goal'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: weightController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Target weight (kg)',
+                  hintText: 'e.g. 100',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: repsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Target reps',
+                  hintText: 'e.g. 5',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final wText = weightController.text.trim();
+                final rText = repsController.text.trim();
+
+                final weight = double.tryParse(wText);
+                final reps = int.tryParse(rText);
+
+                if (weight == null || reps == null || reps <= 0) {
+                  Navigator.of(ctx).pop(null);
+                  return;
+                }
+
+                Navigator.of(ctx).pop({
+                  'weight': weight,
+                  'reps': reps,
+                });
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    final goalWeight = result['weight'] as double;
+    final goalReps = result['reps'] as int;
+
+    final updated = _exercise.copyWith(
+      goalWeight: goalWeight,
+      goalReps: goalReps,
+    );
+
+    setState(() {
+      _exercise = updated;
+    });
+
+    widget.onUpdateExercise(updated);
+  }
+
+  // ---- BEST SET (by estimated 1RM) ----
+
+  _BestSetInfo? _computeBestSet() {
+    double bestEst1RM = 0;
+    double bestWeight = 0;
+    int bestReps = 0;
+
+    for (final s in widget.sessions) {
+      for (final we in s.exercises) {
+        if (we.exercise.id != _exercise.id) continue;
+
+        for (final set in we.sets) {
+          if (set.weight == null) continue;
+          final w = set.weight!;
+          final r = set.reps;
+          final est = _estimate1RM(w, r);
+          if (est > bestEst1RM) {
+            bestEst1RM = est;
+            bestWeight = w;
+            bestReps = r;
+          }
+        }
+      }
+    }
+
+    if (bestEst1RM <= 0) return null;
+    return _BestSetInfo(bestWeight, bestReps, bestEst1RM);
+  }
 }
 
-// ---- DATA STRUCTURES & HELPERS ----
+// ---- SUPPORT TYPES & HELPERS ----
+
+double _estimate1RM(double weight, int reps) {
+  final r = reps.clamp(1, 30);
+  return weight * (1.0 + r / 30.0);
+}
+
+class _BestSetInfo {
+  final double weight;
+  final int reps;
+  final double est1rm;
+
+  _BestSetInfo(this.weight, this.reps, this.est1rm);
+}
 
 class _ExerciseTrendPoint {
   final DateTime date;
@@ -166,7 +505,6 @@ List<_ExerciseTrendPoint> _buildTrendData(
           if (set.weight! > maxW) maxW = set.weight!;
           volume += set.weight! * set.reps;
         } else {
-          // bodyweight
           volume += set.reps.toDouble();
         }
       }
@@ -210,9 +548,8 @@ _TrendResult _computeTrend(List<double> values) {
 
   final n = values.length;
 
-  // Use last k vs previous k (k <= 3 and 2k <= n)
   int k = math.min(3, n ~/ 2);
-  if (k == 0) k = 1; // extra safety
+  if (k == 0) k = 1;
 
   final recent = values.sublist(n - k);
   final previous = values.sublist(n - 2 * k, n - k);
@@ -223,7 +560,6 @@ _TrendResult _computeTrend(List<double> values) {
       previous.reduce((a, b) => a + b) / previous.length.toDouble();
 
   if (avgPrev == 0) {
-    // Hard to define relative change; call it unknown
     return const _TrendResult(
       direction: TrendDirection.unknown,
       deltaAbs: null,
@@ -235,8 +571,8 @@ _TrendResult _computeTrend(List<double> values) {
   final diff = avgRecent - avgPrev;
   final rel = diff / avgPrev;
 
-  const upThreshold = 0.05; // +5%
-  const downThreshold = -0.05; // -5%
+  const upThreshold = 0.05;
+  const downThreshold = -0.05;
 
   TrendDirection dir;
   if (rel > upThreshold) {
@@ -255,22 +591,51 @@ _TrendResult _computeTrend(List<double> values) {
   );
 }
 
-String? _computePrInfo(List<double> weightValues) {
-  if (weightValues.length < 2) return null;
+String? _computePrInfo(Exercise exercise, List<double> weightValues) {
+  final manual = exercise.manualPr;
+
+  if (weightValues.isEmpty) {
+    if (manual != null) {
+      return 'Current all-time best (manual): '
+          '${manual.toStringAsFixed(1)} kg.';
+    }
+    return null;
+  }
 
   final n = weightValues.length;
   final last = weightValues.last;
 
-  final prevBest =
-      weightValues.sublist(0, n - 1).reduce((a, b) => a > b ? a : b);
+  double? prevBest;
+
+  if (n >= 2) {
+    final prevDataBest = weightValues
+        .sublist(0, n - 1)
+        .reduce((a, b) => a > b ? a : b);
+    prevBest = prevDataBest;
+  }
+
+  if (manual != null) {
+    prevBest = prevBest == null ? manual : math.max(prevBest, manual);
+  }
+
+  if (prevBest == null) {
+    return 'Current all-time best: ${last.toStringAsFixed(1)} kg.';
+  }
 
   if (last > prevBest + 0.25) {
     final diff = last - prevBest;
     return 'New PR last session: ${last.toStringAsFixed(1)} kg '
-        '(+${diff.toStringAsFixed(1)} kg over previous best ${prevBest.toStringAsFixed(1)} kg).';
+        '(+${diff.toStringAsFixed(1)} kg over previous best '
+        '${prevBest.toStringAsFixed(1)} kg).';
   }
 
-  return 'Current all-time best: ${prevBest.toStringAsFixed(1)} kg.';
+  final bestOverall = math.max(prevBest, last);
+  if (manual != null && manual > bestOverall) {
+    return 'Current all-time best (manual): '
+        '${manual.toStringAsFixed(1)} kg.';
+  }
+
+  return 'Current all-time best: ${bestOverall.toStringAsFixed(1)} kg.';
 }
 
 Widget _buildTrendRow({
