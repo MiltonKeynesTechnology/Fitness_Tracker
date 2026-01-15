@@ -1,20 +1,22 @@
 // lib/screens/workout_detail_screen.dart
+
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 
 class WorkoutDetailScreen extends StatefulWidget {
   final WorkoutSession session;
   final List<Exercise> allExercises;
+  final VoidCallback onSessionsChanged;
   final void Function(Exercise) onAddExercise;
-  final VoidCallback? onChanged;
-  final void Function(WorkoutSession) onDeleteSession; 
+  final void Function(WorkoutSession) onDeleteSession;
 
   const WorkoutDetailScreen({
     super.key,
     required this.session,
     required this.allExercises,
+    required this.onSessionsChanged,
     required this.onAddExercise,
-    required this.onChanged,
     required this.onDeleteSession,
   });
 
@@ -25,10 +27,12 @@ class WorkoutDetailScreen extends StatefulWidget {
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   late TextEditingController _nameController;
 
+  WorkoutSession get _session => widget.session;
+
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.session.name);
+    _nameController = TextEditingController(text: _session.name);
   }
 
   @override
@@ -38,261 +42,193 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   }
 
   void _updateName(String value) {
-    widget.session.name = value.trim();
-    widget.onChanged?.call();
-  }
-
-    Future<void> _confirmDeleteWorkout() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete workout?'),
-        content: const Text(
-          'This will delete the entire workout and all its sets.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true) {
-      widget.onDeleteSession(widget.session);
-      widget.onChanged?.call();
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    }
-  }
-
-  Future<void> _editSet(
-    WorkoutExercise we,
-    int index,
-  ) async {
-    final set = we.sets[index];
-    final repsController =
-        TextEditingController(text: set.reps.toString());
-    final weightController =
-        TextEditingController(text: set.weight?.toString() ?? '');
-
-    final result = await showDialog<WorkoutSet>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Edit set ${index + 1}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: repsController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Reps'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: weightController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration:
-                    const InputDecoration(labelText: 'Weight (kg, optional)'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final reps = int.tryParse(repsController.text);
-                final weight =
-                    double.tryParse(weightController.text);
-                if (reps == null || reps <= 0) {
-                  return;
-                }
-                Navigator.of(context).pop(
-                  WorkoutSet(reps: reps, weight: weight),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result != null) {
-      setState(() {
-        we.sets[index] = result;
-      });
-      widget.onChanged?.call();
-    }
-  }
-
-  void _deleteSet(WorkoutExercise we, int index) {
     setState(() {
-      we.sets.removeAt(index);
+      _session.name = value.trim().isEmpty ? _session.name : value.trim();
     });
-    widget.onChanged?.call();
+    widget.onSessionsChanged();
   }
 
-  Future<void> _addSet(WorkoutExercise we) async {
-    final repsController = TextEditingController();
-    final weightController = TextEditingController();
-
-    final result = await showDialog<WorkoutSet>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Add set (${we.exercise.name})'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: repsController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Reps'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: weightController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration:
-                    const InputDecoration(labelText: 'Weight (kg, optional)'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final reps = int.tryParse(repsController.text);
-                final weight =
-                    double.tryParse(weightController.text);
-                if (reps == null || reps <= 0) return;
-                Navigator.of(context).pop(
-                  WorkoutSet(reps: reps, weight: weight),
-                );
-              },
-              child: const Text('Add'),
-            ),
+  void _addExercise(Exercise exercise) {
+    setState(() {
+      _session.exercises.add(
+        WorkoutExercise(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          exercise: exercise,
+          sets: [
+            ExerciseSet(reps: 0, weight: null),
           ],
+        ),
+      );
+    });
+    widget.onSessionsChanged();
+  }
+
+  void _markCompleted() {
+  setState(() {
+    _session.status = WorkoutStatus.completed;
+  });
+  widget.onSessionsChanged();
+  }
+
+  void _removeExercise(WorkoutExercise we) {
+    setState(() {
+      _session.exercises.removeWhere((x) => x.id == we.id);
+    });
+    widget.onSessionsChanged();
+  }
+
+  void _addSet(WorkoutExercise we) {
+    setState(() {
+      we.sets.add(ExerciseSet(reps: 0, weight: null));
+    });
+    widget.onSessionsChanged();
+  }
+
+  void _removeSet(WorkoutExercise we, int index) {
+    setState(() {
+      if (index >= 0 && index < we.sets.length) {
+        we.sets.removeAt(index);
+      }
+    });
+    widget.onSessionsChanged();
+  }
+
+  Future<void> _showAddExerciseSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final all = List<Exercise>.from(widget.allExercises)
+          ..sort((a, b) => a.name.compareTo(b.name));
+
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: bottomInset + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Add exercise to this workout',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  if (all.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text('No exercises yet. Create one first.'),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: all.length,
+                      itemBuilder: (context, index) {
+                        final e = all[index];
+                        return ListTile(
+                          title: Text(e.name),
+                          subtitle: Text(
+                            '${bodyRegionLabel(e.region)} • ${muscleGroupLabel(e.group)}'
+                            '${e.subGroup != null ? ' • ${e.subGroup}' : ''}',
+                          ),
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            _addExercise(e);
+                          },
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _showCreateExerciseDialog();
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create new exercise'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
-
-    if (result != null) {
-      setState(() {
-        we.sets.add(result);
-      });
-      widget.onChanged?.call();
-    }
   }
 
-  Future<void> _addExerciseToWorkout() async {
-    Exercise? selected;
+  void _showCreateExerciseDialog() {
     final nameController = TextEditingController();
-    BodyRegion region = BodyRegion.upper;
-    MuscleGroup group = MuscleGroup.chest;
     final subGroupController = TextEditingController();
+    BodyRegion selectedRegion = BodyRegion.upper;
+    MuscleGroup selectedGroup = MuscleGroup.midChest;
 
-    final result = await showDialog<WorkoutExercise>(
+    showDialog(
       context: context,
-      builder: (context) {
+      builder: (ctx) {
         return StatefulBuilder(
-          builder: (context, setStateDialog) {
+          builder: (ctx, setState) {
             return AlertDialog(
-              title: const Text('Add exercise to workout'),
+              title: const Text('New exercise'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Choose existing
-                    DropdownButtonFormField<Exercise>(
-                      initialValue: selected,
-                      decoration: const InputDecoration(
-                        labelText: 'Existing exercise (optional)',
-                      ),
-                      items: widget.allExercises
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e,
-                              child: Text(e.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setStateDialog(() {
-                          selected = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Or create new:'),
-                    const SizedBox(height: 8),
                     TextField(
                       controller: nameController,
                       decoration: const InputDecoration(
-                        labelText: 'New exercise name',
+                        labelText: 'Name',
                       ),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<BodyRegion>(
-                      initialValue: region,
+                      value: selectedRegion,
                       decoration: const InputDecoration(
                         labelText: 'Body region',
                       ),
-                      items: BodyRegion.values
-                          .map(
-                            (r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(bodyRegionLabel(r)),
-                            ),
-                          )
-                          .toList(),
+                      items: BodyRegion.values.map((r) {
+                        return DropdownMenuItem(
+                          value: r,
+                          child: Text(bodyRegionLabel(r)),
+                        );
+                      }).toList(),
                       onChanged: (value) {
-                        if (value != null) {
-                          region = value;
-                        }
+                        if (value == null) return;
+                        setState(() => selectedRegion = value);
                       },
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<MuscleGroup>(
-                      initialValue: group,
+                      value: selectedGroup,
                       decoration: const InputDecoration(
-                        labelText: 'Muscle group',
+                        labelText: 'Primary muscle',
                       ),
-                      items: MuscleGroup.values
-                          .map(
-                            (g) => DropdownMenuItem(
-                              value: g,
-                              child: Text(muscleGroupLabel(g)),
-                            ),
-                          )
-                          .toList(),
+                      items: MuscleGroup.values.map((g) {
+                        return DropdownMenuItem(
+                          value: g,
+                          child: Text(muscleGroupLabel(g)),
+                        );
+                      }).toList(),
                       onChanged: (value) {
-                        if (value != null) {
-                          group = value;
-                        }
+                        if (value == null) return;
+                        setState(() => selectedGroup = value);
                       },
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: subGroupController,
                       decoration: const InputDecoration(
-                        labelText: 'Sub-group (optional)',
+                        labelText: 'Extra info (optional)',
+                        hintText: 'e.g. Neutral grip, Cable',
                       ),
                     ),
                   ],
@@ -300,31 +236,28 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(null),
+                  onPressed: () => Navigator.of(ctx).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
                   onPressed: () {
-                    Exercise exercise;
-                    if (selected != null) {
-                      exercise = selected!;
-                    } else {
-                      final name = nameController.text.trim();
-                      if (name.isEmpty) return;
-                      exercise = Exercise(
-                        id: '${DateTime.now().microsecondsSinceEpoch}',
-                        name: name,
-                        region: region,
-                        group: group,
-                        subGroup: subGroupController.text.trim().isEmpty
-                            ? null
-                            : subGroupController.text.trim(),
-                      );
-                      widget.onAddExercise(exercise); // add to global list
-                    }
-                    Navigator.of(context).pop(
-                      WorkoutExercise(exercise: exercise),
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) return;
+
+                    final sub = subGroupController.text.trim();
+                    final newEx = Exercise(
+                      id: DateTime.now()
+                          .millisecondsSinceEpoch
+                          .toString(),
+                      name: name,
+                      region: selectedRegion,
+                      group: selectedGroup,
+                      subGroup: sub.isEmpty ? null : sub,
                     );
+
+                    widget.onAddExercise(newEx);
+                    _addExercise(newEx);
+                    Navigator.of(ctx).pop();
                   },
                   child: const Text('Add'),
                 ),
@@ -334,148 +267,180 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         );
       },
     );
+  }
 
-    if (result != null) {
-      setState(() {
-        widget.session.exercises.add(result);
-      });
-      widget.onChanged?.call();
+  Future<void> _confirmDeleteWorkout() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete workout?'),
+        content: const Text(
+          'This will delete this workout and all its sets.\n'
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      widget.onDeleteSession(_session);
+      if (mounted) Navigator.of(context).pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.session;
+    final theme = Theme.of(context);
+    final date = _session.date;
     final dateStr =
-        '${s.date.day.toString().padLeft(2, '0')}.${s.date.month.toString().padLeft(2, '0')}.${s.date.year}';
+        '${date.day}/${date.month}/${date.year}';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Workout details'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete),
-            tooltip: 'Delete workout',
             onPressed: _confirmDeleteWorkout,
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Add exercise',
-            onPressed: _addExerciseToWorkout,
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Delete workout',
           ),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Date: $dateStr'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Workout name',
-              ),
-              onChanged: _updateName,
+            // Name + date
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Workout name',
+                    ),
+                    onSubmitted: _updateName,
+                    onChanged: (val) {
+                      _session.name = val;
+                      widget.onSessionsChanged();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(dateStr),
+                    const SizedBox(height: 4),
+                    Chip(
+                      label: Text(workoutStatusLabel(_session.status)),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+
+            if (_session.status == WorkoutStatus.planned)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This is a planned workout. When you\'re done logging sets, mark it as completed.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _markCompleted,
+                      icon: const Icon(Icons.check),
+                      label: const Text('Mark completed'),
+                    ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 4),
+
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: _showAddExerciseSheet,
+                icon: const Icon(Icons.add),
+                label: const Text('Add exercise'),
+              ),
+            ),
+            const SizedBox(height: 12),
+
             Expanded(
-              child: s.exercises.isEmpty
-                  ? const Center(
-                      child: Text('No exercises in this workout yet.'),
+              child: _session.exercises.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No exercises logged in this workout.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
                     )
                   : ListView.builder(
-                      itemCount: s.exercises.length,
+                      itemCount: _session.exercises.length,
                       itemBuilder: (context, index) {
-                        final we = s.exercises[index];
-                        final totalReps = we.sets.fold<int>(
-                          0,
-                          (sum, set) => sum + set.reps,
-                        );
+                        final we = _session.exercises[index];
                         return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          margin:
+                              const EdgeInsets.symmetric(vertical: 6),
                           child: Padding(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment:
                                   CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          we.exercise.name,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
-                                        ),
-                                        Text(
-                                          '${muscleGroupLabel(we.exercise.group)}'
-                                          '${we.exercise.subGroup != null ? ' • ${we.exercise.subGroup}' : ''}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                      ],
+                                    Expanded(
+                                      child: Text(
+                                        we.exercise.name,
+                                        style: theme
+                                            .textTheme.titleMedium,
+                                      ),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.add),
-                                      tooltip: 'Add set',
-                                      onPressed: () => _addSet(we),
+                                      onPressed: () =>
+                                          _removeExercise(we),
+                                      icon: const Icon(Icons.delete),
+                                      tooltip: 'Remove exercise',
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                if (we.sets.isEmpty)
-                                  const Text(
-                                    'No sets yet. Tap + to add one.',
-                                  )
-                                else
-                                  Column(
-                                    children:
-                                        List.generate(we.sets.length, (i) {
-                                      final set = we.sets[i];
-                                      return ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(
-                                            'Set ${i + 1}: ${set.reps} reps'),
-                                        subtitle: Text(set.weight != null
-                                            ? '${set.weight} kg'
-                                            : 'Bodyweight'),
-                                        trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(Icons.edit),
-                                              onPressed: () =>
-                                                  _editSet(we, i),
-                                            ),
-                                            IconButton(
-                                              icon:
-                                                  const Icon(Icons.delete),
-                                              onPressed: () =>
-                                                  _deleteSet(we, i),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
+                                const SizedBox(height: 8),
+                                Column(
+                                  children: [
+                                    for (var i = 0;
+                                        i < we.sets.length;
+                                        i++)
+                                      _buildSetRow(we, i),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton.icon(
+                                    onPressed: () => _addSet(we),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Add set'),
                                   ),
-                                const SizedBox(height: 4),
-                                if (we.sets.isNotEmpty)
-                                  Text(
-                                    'Total reps: $totalReps',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -485,6 +450,77 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSetRow(WorkoutExercise we, int index) {
+    final set = we.sets[index];
+
+    final repsController = TextEditingController(
+      text: set.reps == 0 ? '' : set.reps.toString(),
+    );
+    final weightController = TextEditingController(
+      text: set.weight?.toString() ?? '',
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text('Set ${index + 1}'),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 70,
+            child: TextField(
+              controller: repsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Reps',
+                isDense: true,
+              ),
+              onChanged: (value) {
+                final r = int.tryParse(value);
+                if (r != null && r > 0) {
+                  set.reps = r;
+                } else {
+                  set.reps = 0;
+                }
+                widget.onSessionsChanged();
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            child: TextField(
+              controller: weightController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'kg',
+                isDense: true,
+              ),
+              onChanged: (value) {
+                if (value.trim().isEmpty) {
+                  set.weight = null;
+                } else {
+                  final w = double.tryParse(value);
+                  if (w != null && w >= 0) {
+                    set.weight = w;
+                  }
+                }
+                widget.onSessionsChanged();
+              },
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            onPressed: () => _removeSet(we, index),
+            icon: const Icon(Icons.close),
+            tooltip: 'Remove set',
+          ),
+        ],
       ),
     );
   }

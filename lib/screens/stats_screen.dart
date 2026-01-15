@@ -52,11 +52,15 @@ class _LiftTrendResult {
 
 class StatsScreen extends StatefulWidget {
   final List<WorkoutSession> sessions;
+  final List<MealEntry> meals;
+  final NutritionGoal? nutritionGoal;
   final Future<void> Function() onClearAll;
 
   const StatsScreen({
     super.key,
     required this.sessions,
+    required this.meals,
+    required this.nutritionGoal,
     required this.onClearAll,
   });
 
@@ -69,10 +73,15 @@ class _StatsScreenState extends State<StatsScreen> {
   String? _selectedExerciseId;
 
   List<WorkoutSession> get _filteredSessions {
-    if (widget.sessions.isEmpty) return const [];
+    // Stats should be based on completed workouts only
+    final completed = widget.sessions
+        .where((s) => s.status == WorkoutStatus.completed)
+        .toList();
+
+    if (completed.isEmpty) return const [];
 
     if (_range == TimeRange.all) {
-      return List.of(widget.sessions);
+      return completed;
     }
 
     final now = DateTime.now();
@@ -96,7 +105,7 @@ class _StatsScreenState extends State<StatsScreen> {
         break;
     }
 
-    return widget.sessions.where((s) => s.date.isAfter(cutoff)).toList();
+    return completed.where((s) => s.date.isAfter(cutoff)).toList();
   }
 
   // ---------- SUMMARY DATA ----------
@@ -132,7 +141,7 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // ---------- EXERCISE LIST & TREND DATA (Stats graphs) ----------
+  // ---------- EXERCISE LIST & TREND DATA ----------
 
   List<Exercise> _availableExercises(List<WorkoutSession> sessions) {
     final map = <String, Exercise>{};
@@ -189,7 +198,7 @@ class _StatsScreenState extends State<StatsScreen> {
   Future<void> _exportCsv(List<WorkoutSession> sessions) async {
     final buffer = StringBuffer();
     buffer.writeln(
-        'Date,Workout Name,Exercise,Muscle Group,Reps,Weight,Volume');
+        'Date,Workout Name,Exercise,Muscle,Reps,Weight,Volume');
 
     for (final s in sessions) {
       final dateStr =
@@ -259,7 +268,7 @@ class _StatsScreenState extends State<StatsScreen> {
     required double Function(_ExerciseTrendPoint p) valueSelector,
     required Color color,
   }) {
-    if (data.isEmpty) {
+    if (data.length < 2) {
       return const Center(
         child: Text('No data for this exercise in this range.'),
       );
@@ -402,7 +411,7 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // ---------- BODY HEATMAP (BLOCKS) ----------
+  // ---------- BODY HEATMAP (PER MUSCLE) ----------
 
   Color _intensityColorFor(
     Map<MuscleGroup, int> muscleData,
@@ -434,111 +443,156 @@ class _StatsScreenState extends State<StatsScreen> {
   ) {
     final theme = Theme.of(context);
 
-    Widget muscleBlock(String label, MuscleGroup group) {
-      final color = _intensityColorFor(muscleData, group);
-      return Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.outline.withOpacity(0.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
+    final ordered = <MuscleGroup>[
+      // Chest
+      MuscleGroup.upperChest,
+      MuscleGroup.midChest,
+      MuscleGroup.lowerChest,
+
+      // Back
+      MuscleGroup.lats,
+      MuscleGroup.upperBack,
+      MuscleGroup.midBack,
+      MuscleGroup.lowerBack,
+
+      // Shoulders
+      MuscleGroup.frontDelts,
+      MuscleGroup.sideDelts,
+      MuscleGroup.rearDelts,
+
+      // Arms
+      MuscleGroup.biceps,
+      MuscleGroup.triceps,
+      MuscleGroup.forearms,
+
+      // Core
+      MuscleGroup.upperAbs,
+      MuscleGroup.lowerAbs,
+      MuscleGroup.obliques,
+      MuscleGroup.spinalErectors,
+
+      // Lower body
+      MuscleGroup.glutes,
+      MuscleGroup.quads,
+      MuscleGroup.hamstrings,
+      MuscleGroup.calves,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Body heatmap (by sets)',
+          'Muscle heatmap (sets in selected range)',
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Shoulders
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Shoulders', MuscleGroup.shoulders),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Chest / Back
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Chest', MuscleGroup.chest),
-                  const SizedBox(width: 16),
-                  muscleBlock('Back', MuscleGroup.back),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Arms
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Arms', MuscleGroup.arms),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Core
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Core', MuscleGroup.core),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Glutes / Legs / Calves
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  muscleBlock('Glutes', MuscleGroup.glutes),
-                  const SizedBox(width: 16),
-                  muscleBlock('Legs', MuscleGroup.legs),
-                  const SizedBox(width: 16),
-                  muscleBlock('Calves', MuscleGroup.calves),
-                ],
-              ),
-            ],
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: ordered.map((m) {
+            final color = _intensityColorFor(muscleData, m);
+            final sets = muscleData[m] ?? 0;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    muscleGroupLabel(m),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                if (sets > 0)
+                  Text(
+                    '$sets sets',
+                    style: theme.textTheme.labelSmall,
+                  ),
+              ],
+            );
+          }).toList(),
         ),
         const SizedBox(height: 12),
         Text(
-          'Intensity: white = low, yellow = medium, red = high (per muscle group in selected time range).',
+          'Intensity: white = low, yellow = medium, red = high for that muscle '
+          'in the selected time range.',
           style: theme.textTheme.bodySmall,
         ),
       ],
     );
   }
 
+  // ---------- NUTRITION-AWARE RECOVERY HELPERS ----------
+
+  DateTime _dayKey(DateTime dt) =>
+      DateTime(dt.year, dt.month, dt.day);
+
+  Map<DateTime, double> _computeDailyProtein(
+    List<MealEntry> meals,
+  ) {
+    final map = <DateTime, double>{};
+    for (final m in meals) {
+      if (m.protein == null) continue;
+      final day = _dayKey(m.dateTime);
+      map[day] = (map[day] ?? 0) + m.protein!;
+    }
+    return map;
+  }
+
+  double _proteinFactorForDay(
+    DateTime day,
+    Map<DateTime, double> dailyProtein,
+    NutritionGoal? goal,
+  ) {
+    if (goal == null || goal.protein == null || goal.protein! <= 0) {
+      // no goal set → neutral
+      return 1.0;
+    }
+
+    final total = dailyProtein[day] ?? 0.0;
+    final ratio = total / goal.protein!;
+
+    // Simple heuristic:
+    // ≥ 100% of goal → slightly better recovery
+    // 60–100%        → neutral
+    // < 60%          → slightly worse recovery
+    if (ratio >= 1.0) return 1.2;
+    if (ratio >= 0.6) return 1.0;
+    return 0.8;
+  }
+
   // ---------- RECOVERY / FATIGUE LOGIC ----------
 
   Map<MuscleGroup, _RecoveryInfo> _computeRecovery(
     List<WorkoutSession> allSessions,
+    List<MealEntry> allMeals,
+    NutritionGoal? goal,
   ) {
     final now = DateTime.now();
     const tauDays = 2.0; // recovery time constant ~2 days
 
+    final dailyProtein = _computeDailyProtein(allMeals);
+
     final Map<MuscleGroup, List<Map<String, dynamic>>> loadsByGroup = {};
 
     for (final s in allSessions) {
+      if (s.status != WorkoutStatus.completed) continue; // ignore planned
+
       final Map<MuscleGroup, double> sessionLoad = {};
 
       for (final we in s.exercises) {
@@ -599,7 +653,12 @@ class _StatsScreenState extends State<StatsScreen> {
         final normalizedLoad = avgLoad > 0 ? load / avgLoad : 1.0;
         final decay = math.exp(-daysAgo / tauDays);
 
-        score += normalizedLoad * decay;
+        final dayKey = _dayKey(date);
+        final protFactor =
+            _proteinFactorForDay(dayKey, dailyProtein, goal);
+        final recoveryFactor = 1.0 / protFactor;
+
+        score += normalizedLoad * decay * recoveryFactor;
       }
 
       RecoveryStatus status;
@@ -672,12 +731,12 @@ class _StatsScreenState extends State<StatsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recovery status (based on recent load)',
+          'Recovery status (per muscle)',
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 4),
         Text(
-          'Higher score = more fatigue. Uses all your past workouts with an exponential decay (~2 days).',
+          'Higher score = more fatigue. Uses all your past workouts with an exponential decay (~2 days) and adjusts for protein intake.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
@@ -849,31 +908,127 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ---------- COACH HINTS ----------
+
+  Widget _buildCoachHints(
+    BuildContext context,
+    Map<MuscleGroup, _RecoveryInfo> recData,
+    Map<MuscleGroup, int> muscleData,
+  ) {
+    final theme = Theme.of(context);
+
+    if (recData.isEmpty && muscleData.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final fresh = <MuscleGroup>[];
+    final fatigued = <MuscleGroup>[];
+    final untrained = <MuscleGroup>[];
+
+    for (final group in MuscleGroup.values) {
+      final info = recData[group];
+      final sets = muscleData[group] ?? 0;
+
+      if (info == null && sets == 0) {
+        untrained.add(group);
+      } else if (info != null) {
+        switch (info.status) {
+          case RecoveryStatus.fresh:
+            fresh.add(group);
+            break;
+          case RecoveryStatus.fatigued:
+            fatigued.add(group);
+            break;
+          case RecoveryStatus.ok:
+            break;
+        }
+      }
+    }
+
+    if (fresh.isEmpty && fatigued.isEmpty && untrained.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget chipsFor(List<MuscleGroup> groups, Color color) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: groups
+            .map(
+              (g) => Chip(
+                label: Text(muscleGroupLabel(g)),
+                backgroundColor: color.withOpacity(0.12),
+                side: BorderSide(color: color.withOpacity(0.6)),
+                labelStyle: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Coach hints',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Based on your recent load (all time), sets in this selected range, and protein intake vs your goal.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+
+        if (fresh.isNotEmpty || untrained.isNotEmpty) ...[
+          Text(
+            'Recommended focus today',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            [...fresh, ...untrained],
+            Colors.green.shade600,
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        if (fatigued.isNotEmpty) ...[
+          Text(
+            'Consider going lighter',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          chipsFor(
+            fatigued,
+            Colors.red.shade600,
+          ),
+        ],
+      ],
+    );
+  }
+
   // ---------- BUILD ----------
 
   @override
   Widget build(BuildContext context) {
-    if (widget.sessions.isEmpty) {
-      return const Center(
-        child: Text('Log some workouts to see stats.'),
-      );
-    }
-
     final theme = Theme.of(context);
     final filtered = _filteredSessions;
 
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text(
-          'No workouts in this ${_rangeLabel(_range).toLowerCase()}.',
-        ),
-      );
-    }
+    // Consider "activity" as having at least one set logged
+    bool hasAnySets(WorkoutSession s) =>
+        s.exercises.any((we) => we.sets.isNotEmpty);
 
-    final muscleData = _setsPerMuscleGroup(filtered);
+    final activeSessions = filtered.where(hasAnySets).toList();
 
-    final totalSessions = filtered.length;
-    final totalSets = filtered.fold<int>(
+    final muscleData = _setsPerMuscleGroup(activeSessions);
+
+    final totalSessions = activeSessions.length;
+    final totalSets = activeSessions.fold<int>(
       0,
       (sum, s) =>
           sum +
@@ -885,11 +1040,11 @@ class _StatsScreenState extends State<StatsScreen> {
 
     int muscleMax = 1;
     if (muscleData.values.isNotEmpty) {
-      muscleMax =
-          muscleData.values.reduce((a, b) => a > b ? a : b);
+      muscleMax = muscleData.values.reduce((a, b) => a > b ? a : b);
+      if (muscleMax <= 0) muscleMax = 1;
     }
 
-    final exercises = _availableExercises(filtered);
+    final exercises = _availableExercises(activeSessions);
     Exercise? selectedExercise;
 
     if (exercises.isNotEmpty) {
@@ -905,91 +1060,143 @@ class _StatsScreenState extends State<StatsScreen> {
 
     final trendData = selectedExercise == null
         ? <_ExerciseTrendPoint>[]
-        : _exerciseTrendData(filtered, selectedExercise.id);
+        : _exerciseTrendData(activeSessions, selectedExercise.id);
 
-    // Recovery + top lifts use ALL sessions
-    final recoveryData = _computeRecovery(widget.sessions);
-    final topLifts = _computeTopImprovingLifts(widget.sessions);
+    final completedWithSets = widget.sessions
+        .where((s) => s.status == WorkoutStatus.completed && hasAnySets(s))
+        .toList();
 
-    return Padding(
+    // IMPORTANT: only compute heavy stats when there is activity in the selected range
+    final Map<MuscleGroup, _RecoveryInfo> recoveryData =
+        activeSessions.isEmpty ? <MuscleGroup, _RecoveryInfo>{} : _computeRecovery(
+          completedWithSets,
+          widget.meals,
+          widget.nutritionGoal,
+        );
+
+    final List<_LiftTrendResult> topLifts =
+        activeSessions.isEmpty ? <_LiftTrendResult>[] : _computeTopImprovingLifts(completedWithSets);
+
+    return Scaffold(
+    appBar: AppBar(
+      title: Text('Stats (${_rangeLabel(_range)})'),
+      actions: [
+        IconButton(
+          tooltip: 'Export CSV',
+          icon: const Icon(Icons.download),
+          onPressed: activeSessions.isEmpty ? null : () => _exportCsv(activeSessions),
+        ),
+        IconButton(
+          tooltip: 'Clear all data',
+          icon: const Icon(Icons.delete_forever),
+          onPressed: _confirmClearAll,
+        ),
+        DropdownButtonHideUnderline(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: DropdownButton<TimeRange>(
+              value: _range,
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _range = value);
+              },
+              items: TimeRange.values.map((r) {
+                return DropdownMenuItem(
+                  value: r,
+                  child: Text(_rangeLabel(r)),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    ),
+    body: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Stats (${_rangeLabel(_range)})',
-                style: theme.textTheme.titleLarge,
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Export CSV',
-                    icon: const Icon(Icons.download),
-                    onPressed: () => _exportCsv(filtered),
-                  ),
-                  IconButton(
-                    tooltip: 'Clear all data',
-                    icon: const Icon(Icons.delete_forever),
-                    onPressed: _confirmClearAll,
-                  ),
-                  DropdownButton<TimeRange>(
-                    value: _range,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _range = value);
-                    },
-                    items: TimeRange.values.map((r) {
-                      return DropdownMenuItem(
-                        value: r,
-                        child: Text(_rangeLabel(r)),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          // Header row (always visible)
+          // Row(
+          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //   children: [
+          //     Text(
+          //       'Stats (${_rangeLabel(_range)})',
+          //       style: theme.textTheme.titleLarge,
+          //     ),
+          //     Row(
+          //       children: [
+          //         IconButton(
+          //           tooltip: 'Export CSV',
+          //           icon: const Icon(Icons.download),
+          //           // disable if nothing to export in this range
+          //           onPressed: activeSessions.isEmpty ? null : () => _exportCsv(activeSessions),
+          //         ),
+          //         IconButton(
+          //           tooltip: 'Clear all data',
+          //           icon: const Icon(Icons.delete_forever),
+          //           onPressed: _confirmClearAll,
+          //         ),
+          //         DropdownButton<TimeRange>(
+          //           value: _range,
+          //           onChanged: (value) {
+          //             if (value == null) return;
+          //             setState(() => _range = value);
+          //           },
+          //           items: TimeRange.values.map((r) {
+          //             return DropdownMenuItem(
+          //               value: r,
+          //               child: Text(_rangeLabel(r)),
+          //             );
+          //           }).toList(),
+          //         ),
+          //       ],
+          //     ),
+          //   ],
+          // ),
+          // const SizedBox(height: 8),
+
           Text(
             '$totalSessions workouts • $totalSets sets',
             style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
+          // Optional empty-state banner (but keep the whole layout)
+          if (activeSessions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'No activity in this ${_rangeLabel(_range).toLowerCase()} yet.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
 
           Expanded(
             child: ListView(
               children: [
-                // --- Sets per muscle group ---
-                Text(
-                  'Sets per muscle group',
-                  style: theme.textTheme.titleMedium,
-                ),
+                // --- Sets per muscle ---
+                Text('Sets per muscle', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
+
                 if (muscleData.isEmpty)
-                  const Text(
-                      'No muscle-group data for this range.\n(You may have workouts with zero sets.)')
+                  Text(
+                    'No set data for this range.',
+                    style: theme.textTheme.bodySmall,
+                  )
                 else
                   Column(
                     children: muscleData.entries.map((entry) {
                       final pct = entry.value / muscleMax;
                       return Padding(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              '${muscleGroupLabel(entry.key)} • ${entry.value} sets',
-                            ),
+                            Text('${muscleGroupLabel(entry.key)} • ${entry.value} sets'),
                             const SizedBox(height: 4),
                             ClipRRect(
-                              borderRadius:
-                                  BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(8),
                               child: LinearProgressIndicator(
                                 value: pct,
                                 minHeight: 10,
@@ -1003,77 +1210,61 @@ class _StatsScreenState extends State<StatsScreen> {
 
                 const SizedBox(height: 24),
 
-                if (muscleData.isNotEmpty) ...[
-                  _buildBodyHeatMap(context, muscleData),
-                  const SizedBox(height: 24),
-                ],
+                // --- Heatmap (always visible; grey if empty) ---
+                _buildBodyHeatMap(context, muscleData),
 
-                // --- Recovery status ---
-                _buildRecoverySection(context, recoveryData),
                 const SizedBox(height: 24),
 
-                // --- Top improving lifts ---
+                // --- Recovery (your existing function already handles empty) ---
+                _buildRecoverySection(context, recoveryData),
+
+                const SizedBox(height: 24),
+
+                // --- Coach hints (your file already contains this) ---
+                _buildCoachHints(context, recoveryData, muscleData),
+
+                const SizedBox(height: 24),
+
+                // --- Top improving lifts (already hides itself if empty) ---
                 _buildTopImprovingLiftsSection(context, topLifts),
-                if (topLifts.isNotEmpty)
-                  const SizedBox(height: 24),
 
-                // --- Exercise trend selector ---
-                Text(
-                  'Exercise trend',
-                  style: theme.textTheme.titleMedium,
-                ),
+                const SizedBox(height: 24),
+
+                // --- Exercise trends ---
+                Text('Exercise trends', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
+                _buildExerciseChips(exercises, selectedExercise),
+                const SizedBox(height: 12),
 
-                if (exercises.isEmpty)
-                  const Text(
-                    'No exercises with sets in this range.',
-                  )
-                else ...[
-                  _buildExerciseChips(exercises, selectedExercise),
-                  const SizedBox(height: 16),
-                  if (selectedExercise != null)
-                    Text(
-                      selectedExercise.name,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  const SizedBox(height: 8),
+                Text('Max weight over time', style: theme.textTheme.bodySmall),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 220,
+                  child: _buildLineChart(
+                    data: trendData,
+                    valueSelector: (p) => p.maxWeight,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
 
-                  // Max weight
-                  Text(
-                    'Max weight over time',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 200,
-                    child: _buildLineChart(
-                      data: trendData,
-                      valueSelector: (p) => p.maxWeight,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-                  // Volume
-                  Text(
-                    'Volume (weight × reps) over time',
-                    style: theme.textTheme.bodySmall,
+                Text('Volume over time', style: theme.textTheme.bodySmall),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 220,
+                  child: _buildLineChart(
+                    data: trendData,
+                    valueSelector: (p) => p.volume,
+                    color: theme.colorScheme.secondary,
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 200,
-                    child: _buildLineChart(
-                      data: trendData,
-                      valueSelector: (p) => p.volume,
-                      color: theme.colorScheme.secondary,
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
           ),
         ],
       ),
+    ),
     );
   }
 }
